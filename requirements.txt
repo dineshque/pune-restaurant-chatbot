@@ -1,0 +1,8 @@
+flask
+twilio
+pandas
+numpy
+typesense
+sentence-transformers
+torch
+python-dotenv

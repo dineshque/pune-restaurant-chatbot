@@ -1,6 +1,7 @@
 # backend/typesense_setup.py
 import typesense
 import pandas as pd
+import os
 
 def create_client():
     """
@@ -13,22 +14,20 @@ def create_client():
             'port': '443',
             'protocol': 'https'
         }],
-        'api_key': 'KHLMZS7UIoLIlTJeA05yhvQE79DXBaLG',
+        'api_key': os.getenv("TYPESENSE_API_KEY") ,
         'connection_timeout_seconds': 10
     })
 
 def create_schema(client):
-    """
-    Define the schema for restaurant collection.
-    """
     schema = {
         "name": "restaurants",
         "fields": [
             {"name": "id", "type": "string"},
             {"name": "name", "type": "string"},
-            {"name": "cuisine", "type": "string"},
+            {"name": "cuisine", "type": "string"},              # comma-separated is fine
             {"name": "address", "type": "string"},
             {"name": "rating", "type": "float"},
+            {"name": "authenticity_score", "type": "float"},    # ✅ new
             {"name": "user_ratings_total", "type": "int32"},
             {"name": "price_level", "type": "int32"},
             {"name": "latitude", "type": "float"},
@@ -37,38 +36,28 @@ def create_schema(client):
             {"name": "website", "type": "string", "optional": True},
             {"name": "summary_text", "type": "string"},
         ],
+        # keep rating; we’ll sort/score in hybrid layer anyway
         "default_sorting_field": "rating"
     }
-
     try:
         client.collections.create(schema)
-        print("✅ Typesense collection created successfully.")
+        print("✅ Collection created.")
     except Exception as e:
-        print("⚠️ Collection may already exist:", e)
+        print("ℹ️ Schema create skipped (probably exists):", e)
 
 def index_data(client):
-    """
-    Load cleaned CSV and index into Typesense.
-    """
     df = pd.read_csv("data/processed/pune_restaurants_cleaned.csv")
-
-    # Create a searchable summary text
     df["summary_text"] = (
         df["name"].fillna("") + " " +
-        df["cuisine"].fillna("") + " " +
-        df["address"].fillna("") + " " +
-        df["rating"].astype(str)
+        df["cuisine"].fillna("") + " restaurant near " +
+        df["address"].fillna("") + " rated " + df["rating"].astype(str)
     )
-
-    # Prepare records
     df["id"] = df.index.astype(str)
     records = df.to_dict(orient="records")
-
-    # Upload data
-    client.collections["restaurants"].documents.import_(records, {'action': 'upsert'})
-    print(f"✅ {len(df)} records indexed into Typesense.")
+    client.collections["restaurants"].documents.import_(records, {'action':'upsert'})
+    print(f"✅ {len(df)} docs indexed.")
 
 if __name__ == "__main__":
-    client = create_client()
-    create_schema(client)
-    index_data(client)
+    c = create_client()
+    create_schema(c)
+    index_data(c)
