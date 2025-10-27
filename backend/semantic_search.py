@@ -103,6 +103,11 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
       - Structured or LLM intent (if provided)
       - Semantic similarity
       - Sentiment & distance weighting
+      Handles:
+      • “near me” → use user coords if provided; else Pune center; default radius 3 km
+      • Textual location → geocode with Pune bias (e.g., “FC Road”)
+      • If neither provided → no hard radius filter; distance used as soft score if coords available
+    
     """
     print("\n Starting hybrid_rank()")
     print(f" Query: {user_query}")
@@ -125,14 +130,52 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
         ("high" if any(w in qlow for w in ["best", "top", "great"]) else None)
     )
 
-    near_me = bool(intent.get("near_me", False))
-    distance_km = float(intent.get("distance_km") or 0)
-    enforce_distance = near_me or (distance_km > 0)
+    # near_me = bool(intent.get("near_me", False))
+    # if near_me or intent.get("location_text") == 'near me':
+    #     distance_km = 20.0
+    # else:
+    #     distance_km = float(intent.get("distance_km") or 0)
+    # enforce_distance = near_me or (distance_km > 0)
+    # print("distance_km -------------->", distance_km)
+    # print(f" Sentiment={sentiment} | RatingTarget={rating_target} | NearMe={near_me} | DistanceFilter={enforce_distance} | Radius={distance_km}")
 
-    print(f" Sentiment={sentiment} | RatingTarget={rating_target} | NearMe={near_me} | DistanceFilter={enforce_distance} | Radius={distance_km}")
+    # 2) Location logic
+    near_me_flag = bool(intent.get("near_me", False) or str(intent.get("location_text","")).strip().lower() == "near me")
 
-    
-    # Step 2: Semantic pool
+    # Decide radius: explicit distance_km wins; else default 3 km for “near me”; else None (no hard filter)
+    explicit_radius = intent.get("distance_km", None)
+    if explicit_radius is not None and str(explicit_radius).strip() != "":
+        try:
+            distance_km = float(explicit_radius)
+        except:
+            distance_km = 5.0 if near_me_flag else None
+    else:
+        distance_km = 5.0 if near_me_flag else None
+
+    # If “near me”: prefer given user_lat/lng; if absent, use Pune center
+    if near_me_flag:
+        if user_lat is None or user_lng is None:
+            print("⚠️ ‘near me’ used but no coords provided — defaulting to Pune center")
+            user_lat, user_lng = 18.5204, 73.8567
+        else:
+            print(f"📍 Using user coords for ‘near me’: ({user_lat},{user_lng})")
+    else:
+        # textual location workflow (geocode if coords not provided)
+        loc_text = intent.get("location_text")
+        if (user_lat is None or user_lng is None) and loc_text:
+            lat, lng = geocode_location(loc_text)
+            if lat and lng:
+                user_lat, user_lng = lat, lng
+                print(f"📍 Geocoded '{loc_text}' → ({user_lat},{user_lng})")
+            else:
+                print(f"⚠️ Couldn’t geocode '{loc_text}', falling back to Pune center")
+                user_lat, user_lng = 18.5204, 73.8567
+
+    # Hard filter only if a radius is decided (either explicit or near_me defaulted)
+    enforce_distance = distance_km is not None
+    print(f"🎯 Sentiment={sentiment} | RatingTarget={rating_target} | NearMe={near_me_flag} | EnforceRadius={enforce_distance} | Radius={distance_km}")
+
+    # Step 3: Semantic pool
     
     df = df.copy()
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
@@ -144,7 +187,7 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
     print(f" Retrieved {len(candidates)} semantic candidates")
 
     
-    # Step 3: Cuisine Filter
+    # Step 4: Cuisine Filter
     
     cuisines = intent.get("cuisines")
     if cuisines:
@@ -156,7 +199,7 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
         print(" No specific cuisine filter applied")
 
     
-    # Step 4: Rating Filter
+    # Step 5: Rating Filter
     
     if rating_target == "high":
         candidates = candidates[candidates["rating"] >= 4.0]
@@ -168,7 +211,7 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
         print(" No rating filter applied")
 
     
-    # Step 5: Distance Handling
+    # Step 6: Distance Handling
     
     from backend.geo_utils import geocode_location
 
@@ -211,7 +254,7 @@ def hybrid_rank(user_query, df, user_lat=None, user_lng=None, top_k=5, intent=No
     result = candidates.sort_values("final_score", ascending=ascending).head(top_k)
 
     print(f" Final {len(result)} results (sentiment={sentiment})")
-    return result[["name", "cuisine", "address", "rating", "distance_km", "final_score"]]
+    return result[["name", "cuisine", "address","number", "rating", "distance_km", "final_score"]]
 
 
 if __name__ == "__main__":

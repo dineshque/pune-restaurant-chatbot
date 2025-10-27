@@ -6,3 +6,5 @@ typesense
 sentence-transformers
 torch
 python-dotenv
+celery
+redis

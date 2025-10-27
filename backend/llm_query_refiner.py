@@ -45,7 +45,7 @@ def parse_intent(user_query: str) -> Dict:
 
     # --- Distance ---
     near_me = any(x in q for x in ["near me","around me","close by","nearby","around"])
-    distance_km = 5.0
+    distance_km = 10.0
     m = re.search(r"within\s*(\d+)\s*(km|kilometers|kms|miles)?", q)
     if m:
         val = float(m.group(1))
