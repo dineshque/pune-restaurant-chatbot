@@ -5,7 +5,7 @@ def load_model():
     """
     Loads and returns a pre-trained SentenceTransformer model.
     """
-    print("🔹 Loading embedding model...")
+    print(" Loading embedding model...")
     model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("✅ Model loaded.")
+    print("Model loaded.")
     return model

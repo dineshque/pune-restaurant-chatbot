@@ -1,4 +1,3 @@
-# backend/typesense_setup.py
 import typesense
 import pandas as pd
 import os
@@ -10,11 +9,11 @@ def create_client():
     """
     return typesense.Client({
         'nodes': [{
-            'host': 'iad9pvfewscx5b04p-1.a1.typesense.net',   # from your Typesense dashboard
+            'host': 'iad9pvfewscx5b04p-1.a1.typesense.net',  
             'port': '443',
             'protocol': 'https'
         }],
-        'api_key': os.getenv("TYPESENSE_API_KEY") ,
+        'api_key': os.getenv("TYPESENSE_API_KEY") or "KHLMZS7UIoLIlTJeA05yhvQE79DXBaLG" ,
         'connection_timeout_seconds': 10
     })
 
@@ -41,9 +40,9 @@ def create_schema(client):
     }
     try:
         client.collections.create(schema)
-        print("✅ Collection created.")
+        print(" Collection created.")
     except Exception as e:
-        print("ℹ️ Schema create skipped (probably exists):", e)
+        print(" Schema create skipped (probably exists):", e)
 
 def index_data(client):
     df = pd.read_csv("data/processed/pune_restaurants_cleaned.csv")
@@ -55,7 +54,7 @@ def index_data(client):
     df["id"] = df.index.astype(str)
     records = df.to_dict(orient="records")
     client.collections["restaurants"].documents.import_(records, {'action':'upsert'})
-    print(f"✅ {len(df)} docs indexed.")
+    print(f" {len(df)} docs indexed.")
 
 if __name__ == "__main__":
     c = create_client()

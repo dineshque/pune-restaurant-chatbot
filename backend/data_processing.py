@@ -1,4 +1,3 @@
-# backend/data_processing.py
 """
 STEP 2 – DATA PROCESSING
 -------------------------
@@ -13,63 +12,33 @@ import re
 import os
 
 def clean_and_preprocess():
-    # raw_path = "backend/data/raw/pune_restaurants_full.csv"
-    raw_path = "backend/data/raw/pune_restaurants_balanced_phone.csv"
+    raw_path = "data/raw/pune_restaurants_.csv"
     processed_path = "data/processed/pune_restaurants_cleaned.csv"
     os.makedirs("data/processed", exist_ok=True)
 
-    # ───────────────────────────────
-    # 1️⃣ Load Data
-    # ───────────────────────────────
+    #  Load Data
+    
     df = pd.read_csv(raw_path)
     print(f"📂 Loaded {len(df)} raw records from {raw_path}")
 
-    # ───────────────────────────────
-
-    # ───────────────────────────────
+    
     # Remove Duplicates
-    # ───────────────────────────────
+    
     before = len(df)
     df.drop_duplicates(subset=["name", "address"], inplace=True)
     after = len(df)
     print(f"🧹 Removed {before - after} duplicates — Remaining: {after}")
 
-    # ───────────────────────────────
-    # 4️⃣ Validate and Normalize Ratings
-    # ───────────────────────────────
+    
+    # Validate and Normalize Ratings
+    
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
     df["rating"] = df["rating"].clip(0, 5)
     df["rating"].fillna(df["rating"].median(), inplace=True)
 
-    # ───────────────────────────────
-    # 5️⃣ Normalize Cuisine Names
-    # ───────────────────────────────
-    def normalize_cuisine(text):
-        if pd.isna(text):
-            return "Other"
-        text = re.sub(r"[^a-zA-Z ]", "", str(text)).strip().title()
-
-        mapping = {
-            "Southindian": "South Indian",
-            "Northindian": "North Indian",
-            "Fastfood": "Fast Food",
-            "Cafe": "Café",
-            "Veg": "Vegetarian",
-            "Pure Veg": "Vegetarian",
-            "Mughlai": "North Indian",
-            "Andhra": "South Indian",
-            "Udupi": "South Indian",
-        }
-        return mapping.get(text.replace(" ", ""), text)
-
-    if "cuisine" in df.columns:
-        df["cuisine"] = df["cuisine"].apply(normalize_cuisine)
-    else:
-        df["cuisine"] = "Other"
-
-    # ───────────────────────────────
-    # 6️⃣ Clean Text Fields
-    # ───────────────────────────────
+    
+    # Clean Text Fields
+    
     def clean_text(t):
         if isinstance(t, str):
             t = re.sub(r"\s+", " ", t)
@@ -80,26 +49,26 @@ def clean_and_preprocess():
         if col in df.columns:
             df[col] = df[col].apply(clean_text)
 
-    # ───────────────────────────────
-    # 7️⃣ Handle Optional Fields
-    # ───────────────────────────────
-    for col in ["phone"]:
+    
+    # Handle Optional Fields
+    
+    for col in ["phone", "website"]:
         if col in df.columns:
             df[col].fillna("Not Available", inplace=True)
 
-    # ───────────────────────────────
-    # 8️⃣ Keep Relevant Columns Only
-    # ───────────────────────────────
+    
+    # Keep Relevant Columns Only
+    
     keep_cols = [
         "name", "cuisine", "address", "rating",
         "latitude", "longitude", "phone",
-        "user_ratings_total"
+        "user_ratings_total","website"
     ]
     df = df[[c for c in keep_cols if c in df.columns]]
 
-    # ───────────────────────────────
-    # 9️⃣ Compute Authenticity Score
-    # ───────────────────────────────
+    
+    # Compute Authenticity Score
+    
     if "user_ratings_total" in df.columns and "rating" in df.columns:
         C = df["rating"].mean()
         m = 100  # minimum reviews threshold for confidence
@@ -112,14 +81,14 @@ def clean_and_preprocess():
         df["authenticity_score"] = df["rating"]
         print("⚠️ Could not compute authenticity scores (missing columns).")
 
-    # ───────────────────────────────
-    # 🔟 Normalize Column Names for Indexing
-    # ───────────────────────────────
+    
+    #  Normalize Column Names for Indexing
+    
     df.columns = [c.lower().replace(" ", "_") for c in df.columns]
 
-    # ───────────────────────────────
-    # 11️⃣ Save Clean Dataset
-    # ───────────────────────────────
+    
+    #  Save Clean Dataset
+    
     df.to_csv(processed_path, index=False)
     print(f"✅ Cleaned dataset saved to {processed_path}")
     print(f"Final record count: {len(df)}")
