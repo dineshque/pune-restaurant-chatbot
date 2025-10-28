@@ -208,6 +208,9 @@ import plotly.express as px
 # ---------------------------
 st.set_page_config(page_title="Restaurant Chatbot Dashboard", layout="wide")
 st.title("🍽️ Pune Restaurant Chatbot — Admin Dashboard")
+# Auto-refresh every 10 seconds
+from streamlit_autorefresh import st_autorefresh
+st_autorefresh(interval=10 * 1000, key="refresh")
 
 # ---------------------------
 # 📁 Data Load Helpers with Validation

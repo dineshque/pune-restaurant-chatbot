@@ -12,6 +12,24 @@ DF = load_df_with_embeddings()
 
 app = Flask(__name__)
 
+# --- Detect if user is sending feedback ---
+def is_feedback_message(msg: str, intent: dict) -> bool:
+    """Return True if message looks like feedback rather than a query."""
+    msg_lower = msg.lower().strip()
+    words = msg_lower.split()
+    short_message = len(words) <= 5
+    feedback_keywords = ["good", "bad", "average", "nice", "poor", "amazing", "great", "ok", "fine", "comment"]
+    cuisine_keywords = ["indian", "chinese", "biryani", "south", "north", "italian", "pizza", "burger", "restaurant", "food"]
+    location_keywords = ["near", "in", "around", "within", "km", "road", "park"]
+
+    # Feedback if short + contains sentiment word + no cuisine/location context + not restaurant intent
+    if short_message and any(k in msg_lower for k in feedback_keywords):
+        if not any(k in msg_lower for k in cuisine_keywords + location_keywords):
+            if not (isinstance(intent, dict) and intent.get("intent_type") == "restaurant_search"):
+                return True
+    return False
+
+
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp_reply():
     start = time.time()
@@ -20,20 +38,6 @@ def whatsapp_reply():
     ensure_feedback_file()
     print(f"\n📩 Incoming WhatsApp message: {user_msg}")
 
-    # --- Detect if user is sending feedback first ---
-    feedback_keywords = ["good", "bad", "average", "nice", "poor", "amazing", "excellent", "great", "ok", "awesome", "satisfied", "unsatisfied"]
-    numeric_feedback = user_msg.isdigit() and 1 <= int(user_msg) <= 5
-    text_feedback = any(word in user_msg.lower() for word in feedback_keywords)
-
-    if numeric_feedback or text_feedback:
-        feedback_type = "Rating" if numeric_feedback else "Comment"
-        feedback_value = f"{user_msg} stars" if numeric_feedback else user_msg
-        save_feedback(user_phone, f"{feedback_type}: {feedback_value}")
-        print(f"💾 Saved {feedback_type.lower()} from {user_phone}: {feedback_value}")
-
-        resp = MessagingResponse()
-        resp.message("✅ Thanks for your feedback! Your response helps us improve.")
-        return str(resp)
 
     # --- Optional: short phrases like “hi”, “thanks” shouldn’t trigger LLM ---
     if user_msg.lower() in ["hi", "hello", "thanks", "thank you", "ok"]:
@@ -58,6 +62,14 @@ def whatsapp_reply():
         groq_api_key=os.getenv("GROQ_API_KEY")
     )
 
+    # --- Handle Feedback After Intent Parsing ---
+    if is_feedback_message(user_msg, refined_query):
+        save_feedback(user_phone, f"Comment: {user_msg}")
+        resp = MessagingResponse()
+        resp.message("Thank you for sharing your feedback 💬!")
+        print(f"📝 Feedback saved safely (true feedback): {user_msg}")
+        return str(resp)
+    
     # Case A — Non-restaurant / conversational text reply
     if isinstance(refined_query, str):
         print("💬 Conversational query detected. Sending Groq's text reply directly.")
@@ -74,6 +86,10 @@ def whatsapp_reply():
         df = DF.copy()
 
         # Hybrid ranking (skip redundant LLM call)
+        from backend.semantic_search import embed_query
+        embed_query.cache_clear()
+        print("🧹 Cleared cached query embeddings.")
+
         hybrid_top = hybrid_rank(
             user_query=user_msg,
             df=df,
@@ -87,12 +103,16 @@ def whatsapp_reply():
         # Prepare WhatsApp response
         reply_lines = [f"🔎 Results for: '{user_msg}'"]
         for _, r in hybrid_top.iterrows():
-            dist = f" • {r['distance_km']:.1f} km" if not pd.isna(r.get('distance_km')) else ""
+            dist = f" • {r['distance_km']:.1f} km" if not pd.isna(r.get("distance_km")) else ""
+        
+            contact = r.get("phone", "N/A") if pd.notna(r.get("phone")) else "N/A"
             reply_lines.append(
-                f"🍴 {r['name']} ({r['cuisine']})\n"
-                f"⭐ {r['rating']} | Trust {r.get('authenticity_score', r['rating']):.2f}{dist}\n"
+                f"🍽️ {r['name']} ({r['cuisine']})\n"
+                f"⭐ {r['rating']}  |  Trust {r.get('authenticity_score', r['rating']):.2f}{dist}\n"
                 f"📍 {r['address']}\n"
+                f"📞 Contact: {contact}\n"
             )
+
 
         resp = MessagingResponse()
         resp.message("\n".join(reply_lines))

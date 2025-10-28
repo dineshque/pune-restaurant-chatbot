@@ -19,7 +19,7 @@ def send_feedback_request(user_phone, user_query, restaurant_list):
         "Reply with:\n⭐ 1–5 for rating\n💬 Or any comment for suggestions."
     )
     account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = "979682fd4c52e1301ea7df344ea30d27"
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
     whatsapp_number = os.getenv("TWILIO_WHATSAPP_NUMBER")
 
     print("Twilio SID:", account_sid)
